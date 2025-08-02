@@ -1,278 +1,241 @@
-# TikTok Viral Video Detector MVP 🚀
+# TikTok Viral Video Detector MVP
 
-TikAPIを使用してFor You Pageから24時間以内に50万再生を達成したバイラル動画を自動検出し、Google Sheetsに出力するMVPツール
+🚀 **TikAPI-powered viral video detection tool with Google Sheets integration**
 
-## 🎯 機能
+Automatically finds TikTok videos that achieve 500k+ views within 24 hours.
 
-- **TikAPI連携**: For You Page + トレンド動画の網羅的取得
-- **バイラル検出**: 24時間以内50万再生条件の自動判定
-- **Google Sheets出力**: 表形式での結果整理・共有
-- **CSV出力**: ローカルファイルでのデータ保存
-- **複数地域対応**: 米国・日本等の地域別検索
-- **リアルタイム処理**: 投稿時刻と再生数による即座判定
+## 🆕 **Latest Updates (v1.1)**
 
-## 📋 出力データ
+### 🔧 **Critical Bug Fixes**
+- **Fixed TikAPI JSON parse error** - Resolved authentication header issue
+- **Enhanced error handling** - Added Content-Type validation and detailed logging
+- **Multiple endpoint support** - Fallback strategy for improved reliability
 
-| 項目 | 説明 |
-|------|------|
-| 動画ID | TikTok動画の一意識別子 |
-| 説明 | 動画の説明文（100文字まで） |
-| 再生数 | 現在の再生数 |
-| いいね数 | いいね数 |
-| コメント数 | コメント数 |
-| シェア数 | シェア数 |
-| アカウント名 | 投稿者のユーザー名 |
-| フォロワー数 | 投稿者のフォロワー数 |
-| 投稿日時 | 動画の投稿日時 |
-| 経過時間(h) | 投稿からの経過時間 |
-| バイラル速度 | 再生数/時間の比率 |
-| 動画URL | TikTok動画への直接リンク |
-| ハッシュタグ | 使用されているハッシュタグ |
-| 認証済み | アカウントの認証状態 |
+### ✨ **New Features**
+- **Connection diagnostic tool** - `test_tikapi_connection.py` for troubleshooting
+- **Enhanced debugging** - Detailed logs with `tikapi_debug.log`
+- **Improved authentication** - Correct `X-API-KEY` header implementation
 
-## 🛠️ セットアップ
+## 📦 **Files Overview**
 
-### 1. 依存関係のインストール
+### **Core Application**
+- `main.py` - Original MVP application
+- `main_fixed.py` - **🆕 Enhanced version with bug fixes**
+- `config.json.template` - Configuration template
 
+### **Testing & Debugging**
+- `test_mvp.py` - Comprehensive test suite
+- `test_tikapi_connection.py` - **🆕 TikAPI connection diagnostic tool**
+
+### **Documentation**
+- `README.md` - This file
+- `google_sheets_setup.md` - Google Sheets integration guide
+
+## 🚀 **Quick Start**
+
+### **Option 1: Use Fixed Version (Recommended)**
 ```bash
+# 1. Install dependencies
 pip install -r requirements.txt
+
+# 2. Test TikAPI connection
+python test_tikapi_connection.py
+
+# 3. Create configuration
+python main_fixed.py --create-config
+
+# 4. Edit config.json with your API key
+
+# 5. Run the detector
+python main_fixed.py
 ```
 
-### 2. 設定ファイルの作成
-
+### **Option 2: Use Original Version**
 ```bash
+# Follow the same steps but use main.py instead of main_fixed.py
 python main.py --create-config
-```
-
-### 3. TikAPIキーの設定
-
-1. [TikAPI](https://tikapi.io/) でアカウント作成
-2. APIキーを取得
-3. `config.json` の `tikapi_key` を更新
-
-```json
-{
-  "tikapi_key": "your_actual_tikapi_key_here"
-}
-```
-
-### 4. Google Sheets設定（オプション）
-
-#### A. Google Cloud Console設定
-
-1. [Google Cloud Console](https://console.cloud.google.com/) でプロジェクト作成
-2. Google Sheets API を有効化
-3. サービスアカウントを作成
-4. 認証キー（JSON）をダウンロード → `credentials.json`
-
-#### B. スプレッドシート設定
-
-1. Google Sheetsで新しいスプレッドシートを作成
-2. スプレッドシートIDをコピー（URLの一部）
-3. スプレッドシートをサービスアカウントと共有
-4. `config.json` の `spreadsheet_id` を更新
-
-```json
-{
-  "spreadsheet_id": "1ABC123def456GHI789jkl..."
-}
-```
-
-## 🚀 使用方法
-
-### 基本実行
-
-```bash
 python main.py
 ```
 
-### カスタム設定ファイル使用
+## 🔧 **Troubleshooting**
 
-```bash
-python main.py --config my_config.json
+### **JSONDecodeError Issues**
+
+If you encounter:
+```
+❌ JSONパースエラー: Expecting value: line 1 column 1 (char 0)
 ```
 
-### 実行例
+**Solution:**
+1. Use the **fixed version**: `python main_fixed.py`
+2. Run diagnostic tool: `python test_tikapi_connection.py`
+3. Check the debug log: `cat tikapi_debug.log`
 
+### **Common Issues & Solutions**
+
+| Issue | Solution |
+|-------|----------|
+| Invalid API Key | Verify key in TikAPI dashboard |
+| HTML response instead of JSON | Use `main_fixed.py` with correct headers |
+| Connection timeout | Check network and proxy settings |
+| Rate limit exceeded | Wait or upgrade TikAPI plan |
+
+## 📊 **Features**
+
+### **Core Functionality**
+- ✅ **24-hour viral detection** - Finds videos with 500k+ views in 24h
+- ✅ **Multi-region support** - US, Japan, and other countries
+- ✅ **Google Sheets export** - Automatic spreadsheet integration
+- ✅ **CSV output** - Local file export with comprehensive data
+
+### **Technical Features**
+- ✅ **Rate limiting** - Respects API limits
+- ✅ **Error handling** - Robust exception management
+- ✅ **Logging system** - Detailed debug information
+- ✅ **Multiple endpoints** - Fallback strategy for reliability
+
+### **Data Points Collected**
+- Video ID, description, view count
+- Likes, comments, shares
+- Author information and follower count
+- Post time and viral speed calculation
+- Hashtags and verification status
+- Direct video URLs
+
+## 🔑 **API Key Setup**
+
+### **Get TikAPI Key**
+1. Visit [TikAPI.io](https://tikapi.io/)
+2. Create account and get API key
+3. Add key to `config.json`:
+```json
+{
+  "tikapi_key": "your_actual_api_key_here"
+}
+```
+
+### **Test Your Setup**
+```bash
+python test_tikapi_connection.py
+```
+
+## 📈 **Expected Output**
+
+### **Console Output**
 ```
 🚀 TikTok バイラル動画検出を開始します
 📊 条件: 24時間以内に500,000再生以上
 🌍 US 地域の動画を検索中...
-📈 リクエスト 1/10: 45件処理, 3件バイラル検出
-🔥 バイラル動画: Amazing dance trend everyone is doing... (750,000再生, 18.5h経過)
-🔥 バイラル動画: Cooking hack that will blow your mind... (1,200,000再生, 12.3h経過)
-
-✅ 収集完了: 450件処理, 12件のバイラル動画を検出
-
-🎉 12件のバイラル動画を検出しました！
+📈 リクエスト 1/10: 30件処理, 3件バイラル検出
+🔥 バイラル動画: Amazing dance trend... (1,500,000再生, 18h経過)
+✅ 収集完了: 300件処理, 12件のバイラル動画を検出
 📄 CSVファイル: viral_videos_20250802_143022.csv
 📊 Google Sheetsに出力完了
-✅ 処理完了
 ```
 
-## ⚙️ 設定オプション
-
-### config.json 設定項目
-
-```json
-{
-  "tikapi_key": "YOUR_TIKAPI_KEY_HERE",
-  "min_views": 500000,
-  "time_limit_hours": 24,
-  "max_requests": 10,
-  "countries": ["us", "jp"],
-  "spreadsheet_id": "YOUR_SPREADSHEET_ID_HERE",
-  "credentials_path": "credentials.json",
-  "output_csv": true,
-  "csv_filename": "viral_videos_{timestamp}.csv"
-}
-```
-
-| 設定項目 | 説明 | デフォルト |
-|----------|------|------------|
-| `tikapi_key` | TikAPIのAPIキー | 必須 |
-| `min_views` | 最小再生数（バイラル条件） | 500000 |
-| `time_limit_hours` | 時間制限（時間） | 24 |
-| `max_requests` | 地域あたりの最大リクエスト数 | 10 |
-| `countries` | 検索対象国（ISO 2文字コード） | ["us", "jp"] |
-| `spreadsheet_id` | Google SheetsのスプレッドシートID | オプション |
-| `credentials_path` | Google認証ファイルパス | "credentials.json" |
-| `output_csv` | CSV出力の有効/無効 | true |
-
-## 📊 出力例
-
-### CSV出力
+### **CSV Output Example**
 ```csv
 動画ID,説明,再生数,いいね数,コメント数,シェア数,アカウント名,フォロワー数,投稿日時,経過時間(h),バイラル速度,動画URL,ハッシュタグ,認証済み
-7123456789,Amazing dance trend everyone is doing...,750000,45000,3200,1800,user123,25000,2025-08-02 10:30:00,18.5,40540,https://www.tiktok.com/@user123/video/7123456789,dance viral trending,
+7123456789,Amazing dance trend...,1500000,75000,5000,2000,dancer_pro,250000,2025-08-02 10:30:00,18.0,83333,https://www.tiktok.com/@dancer_pro/video/7123456789,viral dance fyp,
 ```
 
-### Google Sheets出力
-- 自動フォーマット（ヘッダー色付け、数値カンマ区切り）
-- 列幅自動調整
-- 動画URLクリック可能
-- 日時スタンプ付きシート名
+## 🛠️ **Development**
 
-## 🔧 技術仕様
-
-### アーキテクチャ
-
+### **Project Structure**
 ```
-TikTokViralMVP
-├── TikAPIClient (API通信)
-├── ViralVideoDetector (バイラル判定)
-├── GoogleSheetsExporter (出力処理)
-└── 設定管理・ログ・エラーハンドリング
+tiktok-viral-detector-mvp/
+├── main.py                    # Original application
+├── main_fixed.py             # Enhanced version (recommended)
+├── test_tikapi_connection.py # Diagnostic tool
+├── test_mvp.py              # Test suite
+├── config.json.template     # Configuration template
+├── requirements.txt         # Dependencies
+├── README.md               # Documentation
+└── google_sheets_setup.md  # Google Sheets guide
 ```
 
-### データフロー
+### **Key Classes**
+- `TikAPIClient` - API communication with enhanced error handling
+- `ViralVideoDetector` - Core detection logic
+- `GoogleSheetsExporter` - Spreadsheet integration
 
-1. **データ取得**: TikAPI → FYP + トレンド動画
-2. **フィルタリング**: 24時間以内 + 50万再生以上
-3. **データ整形**: 動画情報の抽出・計算
-4. **重複除去**: 動画IDベースの重複排除
-5. **出力**: CSV + Google Sheets
+## 📋 **Requirements**
 
-### レート制限対応
-
-- **TikAPI**: 1秒間隔でのリクエスト制御
-- **Google Sheets**: バッチ更新による効率化
-- **エラーハンドリング**: 自動リトライとログ記録
-
-## ⚠️ 注意事項
-
-### API制限
-
-- **TikAPI**: プランに応じた月間制限
-- **取得件数**: 30件/リクエスト（TikAPI制限）
-- **レート制限**: 1秒/リクエスト（安全マージン）
-
-### データ品質
-
-- **リアルタイム性**: API提供データに依存
-- **完全性**: 24時間以内の全動画を保証するものではない
-- **精度**: フィルタリング条件は目安として使用
-
-### 利用規約
-
-- **TikTok**: 利用規約の遵守
-- **TikAPI**: サービス規約の確認
-- **Google Sheets**: API利用制限の考慮
-
-## 🚨 トラブルシューティング
-
-### よくある問題
-
-**Q: "TikAPIキーが設定されていません" エラー**
-A: `config.json` の `tikapi_key` を実際のAPIキーに更新してください
-
-**Q: Google Sheets出力ができない**
-A: 
-1. `credentials.json` ファイルの存在確認
-2. スプレッドシートの共有設定確認
-3. Google Sheets APIの有効化確認
-
-**Q: バイラル動画が検出されない**
-A:
-1. 検索条件（再生数・時間制限）の調整
-2. 検索地域の変更
-3. リクエスト数の増加
-
-**Q: "EmptyResponseException" エラー**
-A: TikAPIの制限またはネットワークエラー。時間をおいて再実行
-
-### ログファイル
-
-実行ログは `tiktok_viral_mvp.log` に保存されます：
-
+### **Python Dependencies**
 ```
-2025-08-02 14:30:22 - INFO - 🚀 TikTok バイラル動画検出を開始します
-2025-08-02 14:30:22 - INFO - 📊 条件: 24時間以内に500,000再生以上
-2025-08-02 14:30:25 - INFO - 📈 リクエスト 1/10: 45件処理, 3件バイラル検出
+requests>=2.31.0
+gspread>=5.10.0
+google-auth>=2.22.0
+google-auth-oauthlib>=1.0.0
+google-auth-httplib2>=0.1.0
 ```
 
-## 📈 パフォーマンス
+### **External Services**
+- [TikAPI](https://tikapi.io/) - TikTok data access
+- [Google Sheets API](https://developers.google.com/sheets/api) - Spreadsheet integration (optional)
 
-### 処理速度
+## 🎯 **Use Cases**
 
-- **1リクエスト**: 約2-3秒（レート制限含む）
-- **10リクエスト**: 約30-40秒
-- **100動画処理**: 約5-10秒
+### **Content Creators**
+- Discover trending content patterns
+- Identify viral video characteristics
+- Find inspiration for new content
 
-### メモリ使用量
+### **Marketing Teams**
+- Track viral marketing campaigns
+- Analyze competitor content performance
+- Identify influencer opportunities
 
-- **基本動作**: 約50MB
-- **大量データ**: 約100-200MB（1000件処理時）
+### **Researchers**
+- Study viral content propagation
+- Analyze social media trends
+- Collect data for academic research
 
-## 🔮 今後の拡張予定
+## 🔄 **Version History**
 
-### v1.1 予定機能
+### **v1.1 (Latest)**
+- 🔧 Fixed TikAPI authentication issues
+- ✨ Added connection diagnostic tool
+- 🛠️ Enhanced error handling and logging
+- 📊 Improved debugging capabilities
 
-- **継続監視モード**: 定期実行による自動更新
-- **Slack/Discord通知**: バイラル検出時の即座通知
-- **詳細分析**: ハッシュタグ・音楽トレンド分析
-- **フィルタ強化**: アカウント投稿数・認証状態フィルター
+### **v1.0**
+- 🚀 Initial MVP release
+- ✅ Basic viral video detection
+- 📊 Google Sheets integration
+- 📄 CSV export functionality
 
-### v2.0 予定機能
+## 🤝 **Contributing**
 
-- **Twitter連携**: X(Twitter)バイラル動画の同時検出
-- **AI分析**: コンテンツパターン自動分析
-- **ダッシュボード**: Web UIでのリアルタイム監視
-- **API提供**: 他システムとの連携API
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
-## 📄 ライセンス
+## 📄 **License**
 
-MIT License
+This project is open source. See the repository for license details.
 
-## 🤝 サポート
+## 🆘 **Support**
 
-- **Issues**: GitHub Issues でバグ報告・機能要望
-- **Email**: 技術的な質問・サポート
-- **Documentation**: 詳細ドキュメントは Wiki を参照
+### **Issues & Questions**
+- Create an issue on GitHub
+- Check existing issues for solutions
+- Use the diagnostic tool for troubleshooting
+
+### **Feature Requests**
+- Submit feature requests via GitHub issues
+- Describe your use case and requirements
+- Consider contributing the feature yourself
+
+## 🔗 **Links**
+
+- **Repository**: https://github.com/Tohoso/tiktok-viral-detector-mvp
+- **TikAPI Documentation**: https://tikapi.io/documentation/
+- **Google Sheets API**: https://developers.google.com/sheets/api
 
 ---
 
-**開発者**: Manus AI  
-**バージョン**: 1.0.0  
-**最終更新**: 2025年8月2日
+**Made with ❤️ for the content creator community**
 
