@@ -1,147 +1,40 @@
 #!/usr/bin/env python3
 """
-TikTok Viral Video Detector MVP
-TikAPIを使用してFor You Pageから24時間以内50万再生動画を検出
-
-Author: Manus AI
-Version: 1.1.0
-Date: 2025-08-02
+TikTok Viral Video Detector MVP - DB保存版
+日本語動画に絞って24時間で50万再生以上の動画を取得し、DBに保存
 """
 
-import requests
 import json
 import time
 import csv
+import sqlite3
 import os
-import sys
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import logging
-
-# Google Sheets連携用
-try:
-    import gspread
-    from google.oauth2.service_account import Credentials
-    GOOGLE_SHEETS_AVAILABLE = True
-except ImportError:
-    GOOGLE_SHEETS_AVAILABLE = False
-    print("⚠️ Google Sheets連携ライブラリが見つかりません。pip install gspread google-auth でインストールしてください。")
+import requests
 
 # ログ設定
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('tiktok_viral_mvp.log'),
+        logging.FileHandler('tiktok_viral_mvp_db.log'),
         logging.StreamHandler()
     ]
 )
 
-class MockTikAPIClient:
-    """モックTikAPIクライアント"""
+class TikAPIClient:
+    """TikAPIクライアント v2.0"""
     
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self.last_request_time = 0
-        self.min_request_interval = 1.0
-    
-    def _wait_for_rate_limit(self):
-        """レート制限を考慮した待機"""
-        current_time = time.time()
-        time_since_last = current_time - self.last_request_time
-        
-        if time_since_last < self.min_request_interval:
-            wait_time = self.min_request_interval - time_since_last
-            time.sleep(wait_time)
-        
-        self.last_request_time = time.time()
-    
-    def _generate_mock_video(self, video_id: str, is_viral: bool = False) -> dict:
-        """モック動画データを生成"""
-        import random
-        now = datetime.now()
-        
-        if is_viral:
-            # バイラル動画: 24時間以内、50万再生以上
-            create_time = now - timedelta(hours=random.randint(1, 20))
-            views = random.randint(500000, 2000000)
-        else:
-            # 通常動画: 24時間以内、50万再生未満
-            create_time = now - timedelta(hours=random.randint(1, 24))
-            views = random.randint(1000, 400000)
-        
-        return {
-            "id": video_id,
-            "desc": f"モック動画 {video_id} - {'バイラル' if is_viral else '通常'}動画",
-            "createTime": int(create_time.timestamp()),
-            "stats": {
-                "playCount": views,
-                "diggCount": random.randint(100, views // 10),
-                "commentCount": random.randint(10, views // 100),
-                "shareCount": random.randint(5, views // 200)
-            },
-            "author": {
-                "uniqueId": f"user_{random.randint(1000, 9999)}",
-                "followerCount": random.randint(1000, 100000),
-                "verified": random.choice([True, False])
-            },
-            "video": {
-                "playAddr": f"https://www.tiktok.com/@user/video/{video_id}"
-            },
-            "challenges": [
-                {"title": f"#{random.choice(['dance', 'comedy', 'food', 'travel', 'fashion'])}"}
-            ]
-        }
-    
-    def get_fyp_videos(self, count: int = 30, country: str = "us") -> dict:
-        """For You Page動画を取得（モック）"""
-        self._wait_for_rate_limit()
-        
-        import random
-        videos = []
-        viral_count = random.randint(1, 5)  # 1-5件のバイラル動画
-        
-        for i in range(count):
-            video_id = f"mock_{country}_{random.randint(1000000000, 9999999999)}"
-            is_viral = i < viral_count
-            videos.append(self._generate_mock_video(video_id, is_viral))
-        
-        return {
-            "itemList": videos,
-            "hasMore": True
-        }
-    
-    def get_trending_videos(self, count: int = 30, country: str = "us") -> dict:
-        """トレンド動画を取得（モック）"""
-        self._wait_for_rate_limit()
-        
-        import random
-        videos = []
-        viral_count = random.randint(2, 8)  # 2-8件のバイラル動画
-        
-        for i in range(count):
-            video_id = f"trend_{country}_{random.randint(1000000000, 9999999999)}"
-            is_viral = i < viral_count
-            videos.append(self._generate_mock_video(video_id, is_viral))
-        
-        return {
-            "itemList": videos,
-            "hasMore": True
-        }
-
-class RealTikAPIClient:
-    """実際のTikAPIクライアント"""
-    
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-        self.base_url = "https://tikapi.io/api/v1"
+        self.base_url = "https://api.tikapi.io"
         self.session = requests.Session()
         self.session.headers.update({
             "X-API-KEY": api_key,
             "Content-Type": "application/json"
         })
-        
-        # レート制限対応
         self.last_request_time = 0
         self.min_request_interval = 1.0
     
@@ -156,46 +49,63 @@ class RealTikAPIClient:
         
         self.last_request_time = time.time()
     
-    def get_fyp_videos(self, count: int = 30, country: str = "us") -> Dict:
-        """For You Page動画を取得"""
-        self._wait_for_rate_limit()
-        
-        url = f"{self.base_url}/public/explore"
-        params = {
-            "count": min(count, 30),  # TikAPIの制限
-            "country": country
-        }
-        
+    def verify_api_key(self) -> bool:
+        """APIキーの有効性を検証"""
         try:
+            logging.info("🔑 APIキーの有効性を検証中...")
+            logging.info("Testing endpoint: public/explore")
+            
+            url = f"{self.base_url}/public/explore"
+            params = {"count": 5, "country": "jp"}
+            
             response = self.session.get(url, params=params, timeout=30)
-            response.raise_for_status()
-            return response.json()
-        
+            logging.info(f"Status: {response.status_code}")
+            logging.info(f"Content-Type: {response.headers.get('Content-Type', 'N/A')}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                logging.info("✅ JSON parse successful")
+                logging.info("✅ APIキーが有効です")
+                return True
+            else:
+                logging.error(f"❌ APIキーが無効: {response.status_code} {response.text}")
+                return False
+                
         except Exception as e:
-            logging.error(f"TikAPI リクエストエラー: {e}")
-            return {"itemList": [], "hasMore": False}
+            logging.error(f"❌ APIキー検証エラー: {e}")
+            return False
     
-    def get_trending_videos(self, count: int = 30, country: str = "us") -> Dict:
-        """トレンド動画を取得（FYPの代替）"""
+    def get_videos(self, count: int = 30, country: str = "jp") -> Dict:
+        """動画を取得"""
         self._wait_for_rate_limit()
         
-        url = f"{self.base_url}/public/trending"
-        params = {
-            "count": min(count, 30),
-            "country": country
-        }
-        
         try:
+            logging.info(f"Trying endpoint: public/explore")
+            logging.info(f"Making request to: {self.base_url}/public/explore")
+            
+            url = f"{self.base_url}/public/explore"
+            params = {"count": count, "country": country}
+            
             response = self.session.get(url, params=params, timeout=30)
-            response.raise_for_status()
-            return response.json()
-        
+            logging.info(f"Response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                videos = data.get('itemList', [])
+                logging.info(f"API request successful")
+                logging.info(f"Extracted {len(videos)} videos from response")
+                logging.info(f"Successfully retrieved {len(videos)} videos from public/explore")
+                return {"itemList": videos, "hasMore": True}
+            else:
+                logging.error(f"API request failed: {response.status_code}")
+                return {"itemList": [], "hasMore": False}
+                
         except Exception as e:
-            logging.error(f"TikAPI トレンドリクエストエラー: {e}")
+            logging.error(f"API request error: {e}")
             return {"itemList": [], "hasMore": False}
 
 class ViralVideoDetector:
-    """バイラル動画検出器"""
+    """バイラル動画検出器 v2.0"""
     
     def __init__(self, min_views: int = 500000, time_limit_hours: int = 24):
         self.min_views = min_views
@@ -209,7 +119,7 @@ class ViralVideoDetector:
             if not create_time:
                 return False
             
-            # 24時間以内チェック
+            # 時間制限チェック
             time_diff = datetime.now() - create_time
             if time_diff > timedelta(hours=self.time_limit_hours):
                 return False
@@ -267,139 +177,219 @@ class ViralVideoDetector:
             viral_speed = views / (time_diff.total_seconds() / 3600) if time_diff.total_seconds() > 0 else 0
             
             return {
-                "動画ID": video.get("id", ""),
-                "説明": video.get("desc", "")[:100],
-                "再生数": views,
-                "いいね数": video.get("stats", {}).get("diggCount", 0),
-                "コメント数": video.get("stats", {}).get("commentCount", 0),
-                "シェア数": video.get("stats", {}).get("shareCount", 0),
-                "アカウント名": video.get("author", {}).get("uniqueId", ""),
-                "フォロワー数": video.get("author", {}).get("followerCount", 0),
-                "投稿日時": create_time.strftime("%Y-%m-%d %H:%M:%S") if create_time else "",
-                "経過時間(h)": round(time_diff.total_seconds() / 3600, 1),
-                "バイラル速度": int(viral_speed),
-                "動画URL": f"https://www.tiktok.com/@{video.get('author', {}).get('uniqueId', '')}/video/{video.get('id', '')}",
-                "ハッシュタグ": ", ".join([challenge.get("title", "") for challenge in video.get("challenges", [])]),
-                "認証済み": "✓" if video.get("author", {}).get("verified", False) else ""
+                "video_id": video.get("id", ""),
+                "description": video.get("desc", "")[:200],
+                "views": views,
+                "likes": video.get("stats", {}).get("diggCount", 0),
+                "comments": video.get("stats", {}).get("commentCount", 0),
+                "shares": video.get("stats", {}).get("shareCount", 0),
+                "author_username": video.get("author", {}).get("uniqueId", ""),
+                "author_nickname": video.get("author", {}).get("nickname", ""),
+                "follower_count": video.get("author", {}).get("followerCount", 0),
+                "create_time": create_time.strftime("%Y-%m-%d %H:%M:%S") if create_time else "",
+                "hours_since_post": round(time_diff.total_seconds() / 3600, 1),
+                "viral_speed": int(viral_speed),
+                "video_url": f"https://www.tiktok.com/@{video.get('author', {}).get('uniqueId', '')}/video/{video.get('id', '')}",
+                "hashtags": ", ".join([challenge.get("title", "") for challenge in video.get("challenges", [])]),
+                "verified": video.get("author", {}).get("verified", False),
+                "country": "jp",
+                "collected_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             
         except Exception as e:
             logging.error(f"動画情報抽出エラー: {e}")
             return {}
 
-class GoogleSheetsExporter:
-    """Google Sheets出力クラス"""
+class DatabaseManager:
+    """データベース管理クラス"""
     
-    def __init__(self, credentials_path: str = "credentials.json"):
-        self.credentials_path = credentials_path
-        self.client = None
-        self._initialize()
+    def __init__(self, db_path: str = "tiktok_viral_videos.db"):
+        self.db_path = db_path
+        self.init_database()
     
-    def _initialize(self):
-        """Google Sheetsクライアントを初期化"""
-        if not GOOGLE_SHEETS_AVAILABLE:
-            logging.warning("Google Sheets連携ライブラリが利用できません")
-            return
-        
+    def init_database(self):
+        """データベースを初期化"""
         try:
-            if os.path.exists(self.credentials_path):
-                scopes = [
-                    'https://www.googleapis.com/auth/spreadsheets',
-                    'https://www.googleapis.com/auth/drive'
-                ]
-                credentials = Credentials.from_service_account_file(
-                    self.credentials_path, scopes=scopes
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # バイラル動画テーブルを作成
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS viral_videos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    video_id TEXT UNIQUE,
+                    description TEXT,
+                    views INTEGER,
+                    likes INTEGER,
+                    comments INTEGER,
+                    shares INTEGER,
+                    author_username TEXT,
+                    author_nickname TEXT,
+                    follower_count INTEGER,
+                    create_time TEXT,
+                    hours_since_post REAL,
+                    viral_speed INTEGER,
+                    video_url TEXT,
+                    hashtags TEXT,
+                    verified BOOLEAN,
+                    country TEXT,
+                    collected_at TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-                self.client = gspread.authorize(credentials)
-                logging.info("✅ Google Sheets連携を初期化しました")
-            else:
-                logging.warning(f"認証ファイルが見つかりません: {self.credentials_path}")
+            ''')
+            
+            # 全動画テーブルを作成（バイラルでない動画も保存）
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS all_videos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    video_id TEXT UNIQUE,
+                    description TEXT,
+                    views INTEGER,
+                    likes INTEGER,
+                    comments INTEGER,
+                    shares INTEGER,
+                    author_username TEXT,
+                    author_nickname TEXT,
+                    follower_count INTEGER,
+                    create_time TEXT,
+                    hours_since_post REAL,
+                    viral_speed INTEGER,
+                    video_url TEXT,
+                    hashtags TEXT,
+                    verified BOOLEAN,
+                    country TEXT,
+                    collected_at TEXT,
+                    is_viral BOOLEAN,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            conn.commit()
+            conn.close()
+            logging.info(f"✅ データベース初期化完了: {self.db_path}")
+            
         except Exception as e:
-            logging.error(f"Google Sheets初期化エラー: {e}")
+            logging.error(f"データベース初期化エラー: {e}")
     
-    def export_to_sheets(self, viral_videos: List[Dict], spreadsheet_id: str = None, sheet_name: str = None) -> bool:
-        """Google Sheetsに出力"""
-        if not self.client or not viral_videos:
-            return False
-        
+    def save_video(self, video_info: Dict, is_viral: bool = False):
+        """動画情報をデータベースに保存"""
         try:
-            # スプレッドシートを開く
-            if spreadsheet_id:
-                spreadsheet = self.client.open_by_key(spreadsheet_id)
-            else:
-                spreadsheet = self.client.open("TikTok Viral Videos")
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
             
-            # シート名を決定
-            if not sheet_name:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                sheet_name = f"バイラル動画_{timestamp}"
+            # 全動画テーブルに保存
+            cursor.execute('''
+                INSERT OR REPLACE INTO all_videos (
+                    video_id, description, views, likes, comments, shares,
+                    author_username, author_nickname, follower_count, create_time,
+                    hours_since_post, viral_speed, video_url, hashtags, verified,
+                    country, collected_at, is_viral
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                video_info.get('video_id'), video_info.get('description'),
+                video_info.get('views'), video_info.get('likes'),
+                video_info.get('comments'), video_info.get('shares'),
+                video_info.get('author_username'), video_info.get('author_nickname'),
+                video_info.get('follower_count'), video_info.get('create_time'),
+                video_info.get('hours_since_post'), video_info.get('viral_speed'),
+                video_info.get('video_url'), video_info.get('hashtags'),
+                video_info.get('verified'), video_info.get('country'),
+                video_info.get('collected_at'), is_viral
+            ))
             
-            # 新しいシートを作成
-            worksheet = spreadsheet.add_worksheet(title=sheet_name, rows=len(viral_videos) + 10, cols=14)
+            # バイラル動画の場合、バイラル動画テーブルにも保存
+            if is_viral:
+                cursor.execute('''
+                    INSERT OR REPLACE INTO viral_videos (
+                        video_id, description, views, likes, comments, shares,
+                        author_username, author_nickname, follower_count, create_time,
+                        hours_since_post, viral_speed, video_url, hashtags, verified,
+                        country, collected_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    video_info.get('video_id'), video_info.get('description'),
+                    video_info.get('views'), video_info.get('likes'),
+                    video_info.get('comments'), video_info.get('shares'),
+                    video_info.get('author_username'), video_info.get('author_nickname'),
+                    video_info.get('follower_count'), video_info.get('create_time'),
+                    video_info.get('hours_since_post'), video_info.get('viral_speed'),
+                    video_info.get('video_url'), video_info.get('hashtags'),
+                    video_info.get('verified'), video_info.get('country'),
+                    video_info.get('collected_at')
+                ))
             
-            # ヘッダーを設定
-            headers = list(viral_videos[0].keys())
-            worksheet.update('A1:N1', [headers])
-            
-            # データを設定
-            data = [list(video.values()) for video in viral_videos]
-            if data:
-                worksheet.update(f'A2:N{len(data) + 1}', data)
-            
-            # フォーマットを適用
-            self._format_worksheet(worksheet, len(data))
-            
-            logging.info(f"📊 Google Sheetsに出力完了: {sheet_name}")
-            return True
+            conn.commit()
+            conn.close()
             
         except Exception as e:
-            logging.error(f"Google Sheets出力エラー: {e}")
-            return False
+            logging.error(f"データベース保存エラー: {e}")
     
-    def _format_worksheet(self, worksheet, data_rows: int):
-        """ワークシートのフォーマットを適用"""
+    def get_viral_videos(self) -> List[Dict]:
+        """バイラル動画を取得"""
         try:
-            # ヘッダーの背景色を設定
-            worksheet.format('A1:N1', {
-                'backgroundColor': {'red': 0.2, 'green': 0.6, 'blue': 0.9},
-                'textFormat': {'bold': True, 'foregroundColor': {'red': 1, 'green': 1, 'blue': 1}}
-            })
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
             
-            # 数値列のフォーマット
-            worksheet.format(f'C2:C{data_rows + 1}', {'numberFormat': {'type': 'NUMBER', 'pattern': '#,##0'}})
-            worksheet.format(f'D2:F{data_rows + 1}', {'numberFormat': {'type': 'NUMBER', 'pattern': '#,##0'}})
-            worksheet.format(f'H2:H{data_rows + 1}', {'numberFormat': {'type': 'NUMBER', 'pattern': '#,##0'}})
-            worksheet.format(f'K2:K{data_rows + 1}', {'numberFormat': {'type': 'NUMBER', 'pattern': '#,##0'}})
+            cursor.execute('''
+                SELECT * FROM viral_videos 
+                ORDER BY collected_at DESC
+            ''')
             
-            # 列幅を自動調整
-            worksheet.columns_auto_resize(0, 13)
+            columns = [description[0] for description in cursor.description]
+            videos = []
+            
+            for row in cursor.fetchall():
+                video = dict(zip(columns, row))
+                videos.append(video)
+            
+            conn.close()
+            return videos
             
         except Exception as e:
-            logging.warning(f"フォーマット適用エラー: {e}")
+            logging.error(f"バイラル動画取得エラー: {e}")
+            return []
+    
+    def get_stats(self) -> Dict:
+        """データベース統計を取得"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # 全動画数
+            cursor.execute('SELECT COUNT(*) FROM all_videos')
+            total_videos = cursor.fetchone()[0]
+            
+            # バイラル動画数
+            cursor.execute('SELECT COUNT(*) FROM viral_videos')
+            viral_videos = cursor.fetchone()[0]
+            
+            # 最新の収集日時
+            cursor.execute('SELECT MAX(collected_at) FROM all_videos')
+            latest_collection = cursor.fetchone()[0]
+            
+            conn.close()
+            
+            return {
+                "total_videos": total_videos,
+                "viral_videos": viral_videos,
+                "latest_collection": latest_collection
+            }
+            
+        except Exception as e:
+            logging.error(f"統計取得エラー: {e}")
+            return {}
 
-class TikTokViralMVP:
-    """TikTokバイラル動画検出MVP"""
+class TikTokViralDBMVP:
+    """TikTokバイラル動画検出MVP（DB保存版）"""
     
     def __init__(self, config_path: str = "config.json"):
         self.config = self._load_config(config_path)
-        
-        # 設定に基づいてAPIクライアントを選択
-        if self.config.get("use_mock", True):
-            logging.info("🧪 モックモードで実行します")
-            self.tikapi_client = MockTikAPIClient(self.config.get("tikapi_key", "mock_key"))
-        else:
-            logging.info("🌐 実際のTikAPIで実行します")
-            self.tikapi_client = RealTikAPIClient(self.config.get("tikapi_key", ""))
-        
+        self.tikapi_client = TikAPIClient(self.config.get("tikapi_key", ""))
         self.detector = ViralVideoDetector(
             min_views=self.config.get("min_views", 500000),
             time_limit_hours=self.config.get("time_limit_hours", 24)
         )
-        
-        # Google Sheets出力クラス
-        self.sheets_exporter = GoogleSheetsExporter(
-            self.config.get("credentials_path", "credentials.json")
-        )
+        self.db_manager = DatabaseManager()
     
     def _load_config(self, config_path: str) -> Dict:
         """設定ファイルを読み込み"""
@@ -410,107 +400,68 @@ class TikTokViralMVP:
             logging.error(f"設定ファイル読み込みエラー: {e}")
             return {}
     
-    def create_sample_config(self):
-        """サンプル設定ファイルを作成"""
-        sample_config = {
-            "tikapi_key": "YOUR_TIKAPI_KEY_HERE",
-            "min_views": 500000,
-            "time_limit_hours": 24,
-            "max_requests": 10,
-            "countries": ["us", "jp"],
-            "spreadsheet_id": "YOUR_SPREADSHEET_ID_HERE",
-            "credentials_path": "credentials.json",
-            "output_csv": True,
-            "csv_filename": "viral_videos_{timestamp}.csv",
-            "use_mock": True
-        }
-        
-        try:
-            with open('config.json', 'w', encoding='utf-8') as f:
-                json.dump(sample_config, f, indent=2, ensure_ascii=False)
-            print("✅ サンプル設定ファイル config.json を作成しました")
-            print("📝 TikAPIキーとGoogle Sheetsの設定を編集してください")
-        except Exception as e:
-            print(f"❌ 設定ファイル作成エラー: {e}")
-    
-    def collect_viral_videos(self) -> List[Dict]:
-        """バイラル動画を収集"""
-        viral_videos = []
-        countries = self.config.get("countries", ["us", "jp"])
+    def collect_and_save_videos(self) -> List[Dict]:
+        """動画を収集してDBに保存"""
+        all_viral_videos = []
         max_requests = self.config.get("max_requests", 10)
         
-        logging.info(f"🚀 TikTok バイラル動画検出を開始します")
-        logging.info(f"📊 条件: {self.config.get('time_limit_hours', 24)}時間以内に{self.config.get('min_views', 500000):,}再生以上")
+        logging.info(f"🚀 日本語動画収集開始 (24時間で50万再生以上)")
+        logging.info(f"📊 最大リクエスト数: {max_requests}")
         
-        for country in countries:
-            logging.info(f"🌍 {country.upper()} 地域の動画を検索中...")
-            
-            for request_num in range(1, max_requests + 1):
-                try:
-                    # FYP動画取得
-                    fyp_response = self.tikapi_client.get_fyp_videos(count=30, country=country)
-                    fyp_videos = fyp_response.get("itemList", [])
-                    
-                    # トレンド動画取得
-                    trending_response = self.tikapi_client.get_trending_videos(count=30, country=country)
-                    trending_videos = trending_response.get("itemList", [])
-                    
-                    # 動画をマージ
-                    all_videos = fyp_videos + trending_videos
-                    
-                    # バイラル動画を検出
-                    request_viral_count = 0
-                    for video in all_videos:
-                        if self.detector.is_viral_video(video):
-                            video_info = self.detector.extract_video_info(video)
-                            if video_info:
-                                viral_videos.append(video_info)
-                                request_viral_count += 1
-                    
-                    logging.info(f"📈 リクエスト {request_num}/{max_requests}: {len(all_videos)}件処理, {request_viral_count}件バイラル検出")
-                    
-                    # バイラル動画の詳細ログ
-                    for video in all_videos:
-                        if self.detector.is_viral_video(video):
-                            views = self.detector._extract_view_count(video)
-                            create_time = self.detector._parse_create_time(video)
-                            time_diff = datetime.now() - create_time if create_time else timedelta(0)
-                            hours = time_diff.total_seconds() / 3600
-                            logging.info(f"🔥 バイラル動画: {video.get('desc', '')[:50]}... ({views:,}再生, {hours:.1f}h経過)")
-                    
-                    # レート制限を考慮
-                    time.sleep(1)
-                    
-                except Exception as e:
-                    logging.error(f"リクエスト {request_num} エラー: {e}")
+        for request_num in range(1, max_requests + 1):
+            try:
+                logging.info(f"🌍 リクエスト {request_num}/{max_requests} - 日本語動画を収集中...")
+                
+                # 動画を取得
+                response = self.tikapi_client.get_videos(count=30, country="jp")
+                videos = response.get("itemList", [])
+                
+                if not videos:
+                    logging.warning(f"リクエスト {request_num}: 動画が取得できませんでした")
                     continue
+                
+                logging.info(f"📊 リクエスト {request_num}: {len(videos)}件の動画を取得")
+                
+                # 各動画を処理
+                request_viral_count = 0
+                for video in videos:
+                    # 動画情報を抽出
+                    video_info = self.detector.extract_video_info(video)
+                    if not video_info:
+                        continue
+                    
+                    # バイラル判定
+                    is_viral = self.detector.is_viral_video(video)
+                    
+                    # DBに保存
+                    self.db_manager.save_video(video_info, is_viral)
+                    
+                    if is_viral:
+                        all_viral_videos.append(video_info)
+                        request_viral_count += 1
+                        
+                        # バイラル動画の詳細ログ
+                        views = video_info.get('views', 0)
+                        hours = video_info.get('hours_since_post', 0)
+                        desc = video_info.get('description', '')[:50]
+                        logging.info(f"🔥 バイラル動画: {desc}... ({views:,}再生, {hours}h経過)")
+                
+                logging.info(f"📈 リクエスト {request_num}: {request_viral_count}件のバイラル動画を検出")
+                
+                # レート制限を考慮
+                time.sleep(2)
+                
+            except Exception as e:
+                logging.error(f"リクエスト {request_num} エラー: {e}")
+                continue
         
-        # 重複除去
-        unique_videos = self._remove_duplicates(viral_videos)
-        
-        logging.info(f"✅ 収集完了: {len(unique_videos)}件のバイラル動画を検出")
-        return unique_videos
-    
-    def _remove_duplicates(self, viral_videos: List[Dict]) -> List[Dict]:
-        """重複動画を除去"""
-        seen_ids = set()
-        unique_videos = []
-        
-        for video in viral_videos:
-            video_id = video.get("動画ID", "")
-            if video_id and video_id not in seen_ids:
-                seen_ids.add(video_id)
-                unique_videos.append(video)
-        
-        return unique_videos
+        logging.info(f"✅ 収集完了: 合計 {len(all_viral_videos)}件のバイラル動画を検出")
+        return all_viral_videos
     
     def export_to_csv(self, viral_videos: List[Dict]) -> str:
         """CSVファイルに出力"""
-        if not self.config.get("output_csv", True):
-            return ""
-        
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = self.config.get("csv_filename", "viral_videos_{timestamp}.csv").format(timestamp=timestamp)
+        filename = f"viral_videos_db_{timestamp}.csv"
         
         try:
             with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
@@ -520,7 +471,7 @@ class TikTokViralMVP:
                     writer.writeheader()
                     writer.writerows(viral_videos)
             
-            logging.info(f"📄 CSVファイル: {filename}")
+            logging.info(f"📄 CSVファイル出力完了: {filename}")
             return filename
             
         except Exception as e:
@@ -530,8 +481,15 @@ class TikTokViralMVP:
     def run(self):
         """メイン実行"""
         try:
-            # バイラル動画収集
-            viral_videos = self.collect_viral_videos()
+            # APIキー検証
+            if not self.tikapi_client.verify_api_key():
+                logging.error("❌ APIキーの検証に失敗しました")
+                return
+            
+            logging.info("✅ セットアップ検証完了")
+            
+            # 動画収集とDB保存
+            viral_videos = self.collect_and_save_videos()
             
             if not viral_videos:
                 logging.info("❌ バイラル動画が見つかりませんでした")
@@ -541,14 +499,13 @@ class TikTokViralMVP:
             
             # CSV出力
             csv_filename = self.export_to_csv(viral_videos)
-            if csv_filename:
-                logging.info(f"📄 CSVファイル: {csv_filename}")
             
-            # Google Sheets出力
-            spreadsheet_id = self.config.get("spreadsheet_id")
-            if spreadsheet_id and spreadsheet_id != "YOUR_SPREADSHEET_ID_HERE":
-                if self.sheets_exporter.export_to_sheets(viral_videos, spreadsheet_id):
-                    logging.info("📊 Google Sheetsに出力完了")
+            # 統計情報を表示
+            stats = self.db_manager.get_stats()
+            logging.info(f"📊 データベース統計:")
+            logging.info(f"   全動画数: {stats.get('total_videos', 0)}件")
+            logging.info(f"   バイラル動画数: {stats.get('viral_videos', 0)}件")
+            logging.info(f"   最新収集: {stats.get('latest_collection', 'N/A')}")
             
             logging.info("✅ 処理完了")
             
@@ -557,21 +514,8 @@ class TikTokViralMVP:
 
 def main():
     """メイン関数"""
-    # コマンドライン引数の処理
-    if len(sys.argv) > 1 and sys.argv[1] == "--create-config":
-        mvp = TikTokViralMVP()
-        mvp.create_sample_config()
-        return
-    
-    # 設定ファイルの指定
-    config_path = "config.json"
-    if len(sys.argv) > 2 and sys.argv[1] == "--config":
-        config_path = sys.argv[2]
-    
-    # メイン実行
-    mvp = TikTokViralMVP(config_path)
+    mvp = TikTokViralDBMVP()
     mvp.run()
 
 if __name__ == "__main__":
-    main()
-
+    main() 

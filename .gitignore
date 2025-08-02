@@ -4,6 +4,11 @@
 credentials.json
 config.json
 
+# データベースファイル
+*.db
+*.sqlite
+*.sqlite3
+
 # APIキー・トークン
 *.key
 *.token
