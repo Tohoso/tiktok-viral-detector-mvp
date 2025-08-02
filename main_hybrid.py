@@ -1,42 +1,28 @@
 #!/usr/bin/env python3
 """
-TikTok Viral Video Detector MVP
-TikAPIを使用してFor You Pageから24時間以内50万再生動画を検出
-
-Author: Manus AI
-Version: 1.1.0
-Date: 2025-08-02
+TikTok Viral Video Detector MVP - ハイブリッド版
+設定に基づいてモックまたは実際のAPIを使用
 """
 
-import requests
 import json
 import time
 import csv
 import os
-import sys
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import logging
-
-# Google Sheets連携用
-try:
-    import gspread
-    from google.oauth2.service_account import Credentials
-    GOOGLE_SHEETS_AVAILABLE = True
-except ImportError:
-    GOOGLE_SHEETS_AVAILABLE = False
-    print("⚠️ Google Sheets連携ライブラリが見つかりません。pip install gspread google-auth でインストールしてください。")
 
 # ログ設定
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('tiktok_viral_mvp.log'),
+        logging.FileHandler('tiktok_viral_mvp_hybrid.log'),
         logging.StreamHandler()
     ]
 )
 
+# モックAPIクライアント
 class MockTikAPIClient:
     """モックTikAPIクライアント"""
     
@@ -129,10 +115,12 @@ class MockTikAPIClient:
             "hasMore": True
         }
 
+# 実際のTikAPIクライアント
 class RealTikAPIClient:
     """実際のTikAPIクライアント"""
     
     def __init__(self, api_key: str):
+        import requests
         self.api_key = api_key
         self.base_url = "https://tikapi.io/api/v1"
         self.session = requests.Session()
@@ -287,98 +275,8 @@ class ViralVideoDetector:
             logging.error(f"動画情報抽出エラー: {e}")
             return {}
 
-class GoogleSheetsExporter:
-    """Google Sheets出力クラス"""
-    
-    def __init__(self, credentials_path: str = "credentials.json"):
-        self.credentials_path = credentials_path
-        self.client = None
-        self._initialize()
-    
-    def _initialize(self):
-        """Google Sheetsクライアントを初期化"""
-        if not GOOGLE_SHEETS_AVAILABLE:
-            logging.warning("Google Sheets連携ライブラリが利用できません")
-            return
-        
-        try:
-            if os.path.exists(self.credentials_path):
-                scopes = [
-                    'https://www.googleapis.com/auth/spreadsheets',
-                    'https://www.googleapis.com/auth/drive'
-                ]
-                credentials = Credentials.from_service_account_file(
-                    self.credentials_path, scopes=scopes
-                )
-                self.client = gspread.authorize(credentials)
-                logging.info("✅ Google Sheets連携を初期化しました")
-            else:
-                logging.warning(f"認証ファイルが見つかりません: {self.credentials_path}")
-        except Exception as e:
-            logging.error(f"Google Sheets初期化エラー: {e}")
-    
-    def export_to_sheets(self, viral_videos: List[Dict], spreadsheet_id: str = None, sheet_name: str = None) -> bool:
-        """Google Sheetsに出力"""
-        if not self.client or not viral_videos:
-            return False
-        
-        try:
-            # スプレッドシートを開く
-            if spreadsheet_id:
-                spreadsheet = self.client.open_by_key(spreadsheet_id)
-            else:
-                spreadsheet = self.client.open("TikTok Viral Videos")
-            
-            # シート名を決定
-            if not sheet_name:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                sheet_name = f"バイラル動画_{timestamp}"
-            
-            # 新しいシートを作成
-            worksheet = spreadsheet.add_worksheet(title=sheet_name, rows=len(viral_videos) + 10, cols=14)
-            
-            # ヘッダーを設定
-            headers = list(viral_videos[0].keys())
-            worksheet.update('A1:N1', [headers])
-            
-            # データを設定
-            data = [list(video.values()) for video in viral_videos]
-            if data:
-                worksheet.update(f'A2:N{len(data) + 1}', data)
-            
-            # フォーマットを適用
-            self._format_worksheet(worksheet, len(data))
-            
-            logging.info(f"📊 Google Sheetsに出力完了: {sheet_name}")
-            return True
-            
-        except Exception as e:
-            logging.error(f"Google Sheets出力エラー: {e}")
-            return False
-    
-    def _format_worksheet(self, worksheet, data_rows: int):
-        """ワークシートのフォーマットを適用"""
-        try:
-            # ヘッダーの背景色を設定
-            worksheet.format('A1:N1', {
-                'backgroundColor': {'red': 0.2, 'green': 0.6, 'blue': 0.9},
-                'textFormat': {'bold': True, 'foregroundColor': {'red': 1, 'green': 1, 'blue': 1}}
-            })
-            
-            # 数値列のフォーマット
-            worksheet.format(f'C2:C{data_rows + 1}', {'numberFormat': {'type': 'NUMBER', 'pattern': '#,##0'}})
-            worksheet.format(f'D2:F{data_rows + 1}', {'numberFormat': {'type': 'NUMBER', 'pattern': '#,##0'}})
-            worksheet.format(f'H2:H{data_rows + 1}', {'numberFormat': {'type': 'NUMBER', 'pattern': '#,##0'}})
-            worksheet.format(f'K2:K{data_rows + 1}', {'numberFormat': {'type': 'NUMBER', 'pattern': '#,##0'}})
-            
-            # 列幅を自動調整
-            worksheet.columns_auto_resize(0, 13)
-            
-        except Exception as e:
-            logging.warning(f"フォーマット適用エラー: {e}")
-
-class TikTokViralMVP:
-    """TikTokバイラル動画検出MVP"""
+class TikTokViralHybridMVP:
+    """TikTokバイラル動画検出MVP（ハイブリッド版）"""
     
     def __init__(self, config_path: str = "config.json"):
         self.config = self._load_config(config_path)
@@ -395,11 +293,6 @@ class TikTokViralMVP:
             min_views=self.config.get("min_views", 500000),
             time_limit_hours=self.config.get("time_limit_hours", 24)
         )
-        
-        # Google Sheets出力クラス
-        self.sheets_exporter = GoogleSheetsExporter(
-            self.config.get("credentials_path", "credentials.json")
-        )
     
     def _load_config(self, config_path: str) -> Dict:
         """設定ファイルを読み込み"""
@@ -409,29 +302,6 @@ class TikTokViralMVP:
         except Exception as e:
             logging.error(f"設定ファイル読み込みエラー: {e}")
             return {}
-    
-    def create_sample_config(self):
-        """サンプル設定ファイルを作成"""
-        sample_config = {
-            "tikapi_key": "YOUR_TIKAPI_KEY_HERE",
-            "min_views": 500000,
-            "time_limit_hours": 24,
-            "max_requests": 10,
-            "countries": ["us", "jp"],
-            "spreadsheet_id": "YOUR_SPREADSHEET_ID_HERE",
-            "credentials_path": "credentials.json",
-            "output_csv": True,
-            "csv_filename": "viral_videos_{timestamp}.csv",
-            "use_mock": True
-        }
-        
-        try:
-            with open('config.json', 'w', encoding='utf-8') as f:
-                json.dump(sample_config, f, indent=2, ensure_ascii=False)
-            print("✅ サンプル設定ファイル config.json を作成しました")
-            print("📝 TikAPIキーとGoogle Sheetsの設定を編集してください")
-        except Exception as e:
-            print(f"❌ 設定ファイル作成エラー: {e}")
     
     def collect_viral_videos(self) -> List[Dict]:
         """バイラル動画を収集"""
@@ -544,12 +414,6 @@ class TikTokViralMVP:
             if csv_filename:
                 logging.info(f"📄 CSVファイル: {csv_filename}")
             
-            # Google Sheets出力
-            spreadsheet_id = self.config.get("spreadsheet_id")
-            if spreadsheet_id and spreadsheet_id != "YOUR_SPREADSHEET_ID_HERE":
-                if self.sheets_exporter.export_to_sheets(viral_videos, spreadsheet_id):
-                    logging.info("📊 Google Sheetsに出力完了")
-            
             logging.info("✅ 処理完了")
             
         except Exception as e:
@@ -557,21 +421,8 @@ class TikTokViralMVP:
 
 def main():
     """メイン関数"""
-    # コマンドライン引数の処理
-    if len(sys.argv) > 1 and sys.argv[1] == "--create-config":
-        mvp = TikTokViralMVP()
-        mvp.create_sample_config()
-        return
-    
-    # 設定ファイルの指定
-    config_path = "config.json"
-    if len(sys.argv) > 2 and sys.argv[1] == "--config":
-        config_path = sys.argv[2]
-    
-    # メイン実行
-    mvp = TikTokViralMVP(config_path)
+    mvp = TikTokViralHybridMVP()
     mvp.run()
 
 if __name__ == "__main__":
-    main()
-
+    main() 
