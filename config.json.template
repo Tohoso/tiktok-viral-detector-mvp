@@ -1,0 +1,12 @@
+{
+  "tikapi_key": "YOUR_TIKAPI_KEY_HERE",
+  "min_views": 500000,
+  "time_limit_hours": 24,
+  "max_requests": 10,
+  "countries": ["us", "jp"],
+  "spreadsheet_id": "YOUR_SPREADSHEET_ID_HERE",
+  "credentials_path": "credentials.json",
+  "output_csv": true,
+  "csv_filename": "viral_videos_{timestamp}.csv"
+}
+

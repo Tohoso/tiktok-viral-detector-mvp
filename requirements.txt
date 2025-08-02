@@ -1,0 +1,14 @@
+# TikTok Viral Video Detector MVP - 依存関係
+
+# 基本ライブラリ
+requests>=2.31.0
+
+# Google Sheets連携
+gspread>=5.10.0
+google-auth>=2.17.0
+google-auth-oauthlib>=1.0.0
+google-auth-httplib2>=0.1.0
+
+# 標準ライブラリ（明示的記載）
+# json, csv, os, sys, time, datetime, logging, typing, asyncio は標準ライブラリ
+
